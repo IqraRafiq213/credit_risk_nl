@@ -60,8 +60,6 @@ numeric_cols = [
 # %% [markdown]
 #  Drop candidates identified in EDA (near-zero Mann-Whitney significance)
 
-# %%
-drop_candidate = ['residence_since', 'dependants_count', 'telephone', 'job']
 
 # %% [markdown]
 # The core function is to decode values 
@@ -115,6 +113,8 @@ def build_preprocessor(X: pd.DataFrame):
 
 # %% MAIN PIPELINE
 
+
+    ...
 def preprocess(
     X: pd.DataFrame,
     y: pd.Series,
@@ -122,6 +122,12 @@ def preprocess(
     random_state: int = 42,
     save_artifacts: bool = True,
 ):
+    print("Input X shape:", X.shape)          # ADD THIS
+    print("Input X columns:", X.columns.tolist())  # ADD THIS
+    X = decode(X)
+    print("After decode:", X.shape)            # ADD THIS
+    X = drop_columns(X)
+    print("After drop:", X.shape)              # ADD THIS
     # 1. Decode & clean
     X = decode(X)
     X = drop_columns(X)
