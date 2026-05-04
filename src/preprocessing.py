@@ -50,7 +50,6 @@ nominal_cols = [
 
 exclude_cols = ['foreign_worker']
 
-drop_candidate = ['residence_since', 'dependants_count', 'telephone', 'job']
 
 numeric_cols = [
     'duration_months','credit_amount','installment_rate_pct',
@@ -76,11 +75,6 @@ def decode(X: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
-def drop_columns(X: pd.DataFrame) -> pd.DataFrame:
-    cols = exclude_cols + drop_candidate
-    cols = [c for c in cols if c in X.columns]
-    return X.drop(columns=cols)
-print("Columns after drop:", X.columns.tolist())
 
 def build_preprocessor(X: pd.DataFrame):
     ordinal_cols = [c for c in ordinal_maps if c in X.columns]
@@ -97,9 +91,6 @@ def build_preprocessor(X: pd.DataFrame):
         handle_unknown="ignore",
         sparse_output=False
     )
-    print("Ordinal:", ordinal_cols)
-    print("Nominal:", nominal)
-    print("Numeric:", numeric)
     scaler = StandardScaler()
 
     preprocessor = ColumnTransformer([
@@ -112,7 +103,31 @@ def build_preprocessor(X: pd.DataFrame):
 
 
 # %% MAIN PIPELINE
+column_rename = {
+    'Attribute1': 'checking_account_status',
+    'Attribute2': 'duration_months',
+    'Attribute3': 'credit_history',
+    'Attribute4': 'purpose',
+    'Attribute5': 'credit_amount',
+    'Attribute6': 'savings_account',
+    'Attribute7': 'employment_since',
+    'Attribute8': 'installment_rate_pct',
+    'Attribute9': 'personal_status_sex',
+    'Attribute10': 'other_debtors_guarantors',
+    'Attribute11': 'residence_since',
+    'Attribute12': 'property',
+    'Attribute13': 'age',
+    'Attribute14': 'other_installment_plans',
+    'Attribute15': 'housing',
+    'Attribute16': 'existing_credits_count',
+    'Attribute17': 'job',
+    'Attribute18': 'dependants_count',
+    'Attribute19': 'telephone',
+    'Attribute20': 'foreign_worker',
+}
 
+def rename_columns(X: pd.DataFrame) -> pd.DataFrame:
+    return X.rename(columns=column_rename)
 
     ...
 def preprocess(
@@ -122,15 +137,18 @@ def preprocess(
     random_state: int = 42,
     save_artifacts: bool = True,
 ):
-    print("Input X shape:", X.shape)          # ADD THIS
-    print("Input X columns:", X.columns.tolist())  # ADD THIS
+     # 👇 ADD THESE FOUR LINES
+    print("Input X shape:", X.shape)
+    print("Input X columns:", X.columns.tolist())
+    print("Input X head:\n", X.head(2))
+    print("y sample:", y.value_counts().to_dict())
+    X = rename_columns(X)
     X = decode(X)
     print("After decode:", X.shape)            # ADD THIS
-    X = drop_columns(X)
-    print("After drop:", X.shape)              # ADD THIS
+    
     # 1. Decode & clean
     X = decode(X)
-    X = drop_columns(X)
+   
 
     # 2. Target
     y_binary = (y == 2).astype(int)
@@ -177,8 +195,9 @@ def load_preprocessor():
 
 def preprocess_single(input_dict: dict) -> pd.DataFrame:
     X = pd.DataFrame([input_dict])
+    X = rename_columns(X)
     X = decode(X)
-    X = drop_columns(X)
+    
 
     preprocessor = load_preprocessor()
     X = preprocessor.transform(X)
