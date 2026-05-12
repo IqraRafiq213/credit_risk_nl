@@ -1,9 +1,8 @@
 # %%
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import OrdinalEncoder, StandardScaler, OneHotEncoder
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
 from ucimlrepo import fetch_ucirepo
 import joblib
 import os
@@ -42,164 +41,160 @@ ordinal_maps = {'checking_account_status': ['no account', '> 200 DM', '0–200 D
     'employment_since': [ '4–7 years', '> 7 years', '1–4 years','unemployed', '< 1 year'],  # ordered by default rate from EDA
 }
 
-
+# %%
+#nominal column 
 nominal_cols = [
     'purpose','personal_status_sex','other_debtors_guarantors',
     'property','other_installment_plans','housing','job','telephone'
 ]
 
+# %% [markdown]
+# excluded foreign workers due to ethical and legal reasons. 
+
+# %%
 exclude_cols = ['foreign_worker']
 
-
-numeric_cols = [
-    'duration_months','credit_amount','installment_rate_pct',
-    'residence_since','age','existing_credits_count','dependants_count'
-]
+# %%
+numeric_cols = ['duration_months','credit_amount','installment_rate_pct','residence_since','age','existing_credits_count','dependants_count']
 
 # %% [markdown]
 #  Drop candidates identified in EDA (near-zero Mann-Whitney significance)
 
+# %%
+drop_candidate = ['residence_since', 'dependants_count', 'telephone', 'job']
 
 # %% [markdown]
 # The core function is to decode values 
 
 # %%
-
-
-# %%
 def decode(X: pd.DataFrame) -> pd.DataFrame:
     X = X.copy()
-    for col, mapping in label_maps.items():
+    for col, v in label_maps.items():
         if col in X.columns:
-            X[col] = X[col].map(mapping).fillna(X[col])
+            X[col] = X[col].mapped(v).fillna(X[col])
+    return X
+
+# %%
+#pipeline to drop column 
+def dropcolumn(X:pd.DataFrame) -> pd.DataFrame:
+    cols_to_drop = exclude_cols.copy()
+    if drop_candidate:
+        cols_to_drop += drop_candidate
+    existing = [c for c in cols_to_drop if c in X.columns]
+    return X.drop(columns=existing)
+
+# %%
+def build_encoders(X: pd.DataFrame):
+    ordinal_cols = [c for c in ordinal_maps if c in X.columns]
+    ordinal_enc  = OrdinalEncoder(handle_unknown='use_encoded_value')     
+    ordinal_enc.fit(X[ordinal_cols])
+    nominal = [c for c in nominal_cols if c in X.columns]
+    nominal_enc  = OrdinalEncoder(handle_unknown='use_encoded_value')
+    nominal_enc.fit(X[nominal])
+       # Numeric scaler
+    num_cols = [c for c in numeric_cols if c in X.columns]
+    scaler   = StandardScaler()
+    scaler.fit(X[num_cols])
+
+    return ordinal_enc, nominal_enc, scaler
+
+# %%
+def apply_encoders( X: pd.DataFrame, ordinal_enc: OrdinalEncoder, nominal_enc: OrdinalEncoder,scaler: StandardScaler) -> pd.DataFrame:
+    """Apply fitted encoders to a dataframe. Safe to use on train and test."""
+    X = X.copy()
+
+    ordinal_cols = [c for c in ordinal_maps  if c in X.columns]
+    nominal_cols = [c for c in nominal_cols  if c in X.columns]
+    num_cols     = [c for c in numeric_cols  if c in X.columns]
+
+    X[ordinal_cols] = ordinal_enc.transform(X[ordinal_cols])
+    X[nominal_cols] = nominal_enc.transform(X[nominal_cols])
+    X[num_cols]     = scaler.transform(X[num_cols])
+
     return X
 
 
-
-def build_preprocessor(X: pd.DataFrame):
-    ordinal_cols = [c for c in ordinal_maps if c in X.columns]
-    nominal = [c for c in nominal_cols if c in X.columns]
-    numeric = [c for c in numeric_cols if c in X.columns]
-
-    ordinal_enc = OrdinalEncoder(
-        categories=[ordinal_maps[c] for c in ordinal_cols],
-        handle_unknown="use_encoded_value",
-        unknown_value=-1
-    )
-
-    nominal_enc = OneHotEncoder(
-        handle_unknown="ignore",
-        sparse_output=False
-    )
-    scaler = StandardScaler()
-
-    preprocessor = ColumnTransformer([
-        ("ord", ordinal_enc, ordinal_cols),
-        ("nom", nominal_enc, nominal),
-        ("num", scaler, numeric),
-    ])
-
-    return preprocessor
-
-
-# %% MAIN PIPELINE
-column_rename = {
-    'Attribute1': 'checking_account_status',
-    'Attribute2': 'duration_months',
-    'Attribute3': 'credit_history',
-    'Attribute4': 'purpose',
-    'Attribute5': 'credit_amount',
-    'Attribute6': 'savings_account',
-    'Attribute7': 'employment_since',
-    'Attribute8': 'installment_rate_pct',
-    'Attribute9': 'personal_status_sex',
-    'Attribute10': 'other_debtors_guarantors',
-    'Attribute11': 'residence_since',
-    'Attribute12': 'property',
-    'Attribute13': 'age',
-    'Attribute14': 'other_installment_plans',
-    'Attribute15': 'housing',
-    'Attribute16': 'existing_credits_count',
-    'Attribute17': 'job',
-    'Attribute18': 'dependants_count',
-    'Attribute19': 'telephone',
-    'Attribute20': 'foreign_worker',
-}
-
-def rename_columns(X: pd.DataFrame) -> pd.DataFrame:
-    return X.rename(columns=column_rename)
-
-    ...
+# %%
 def preprocess(
     X: pd.DataFrame,
     y: pd.Series,
     test_size: float = 0.2,
+    drop_low_signal: bool = False,
     random_state: int = 42,
     save_artifacts: bool = True,
 ):
-     # 👇 ADD THESE FOUR LINES
-    print("Input X shape:", X.shape)
-    print("Input X columns:", X.columns.tolist())
-    print("Input X head:\n", X.head(2))
-    print("y sample:", y.value_counts().to_dict())
-    X = rename_columns(X)
-    X = decode(X)
-    print("After decode:", X.shape)            # ADD THIS
-    
-    # 1. Decode & clean
-    X = decode(X)
-   
+    """
+    Full preprocessing pipeline:
+    1) Decode UCI codes
+    2) Drop excluded
+    3) Stratified train/test split
+    4) Fit encoders on train only (no leakage)
+    5) Apply to both splits
+    6) Optionally save artifacts to models/
 
-    # 2. Target
-    y_binary = (y == 2).astype(int)
+    Returns:
+        X_train, X_test, y_train, y_test
+    """
 
-    # 3. Split
+    X = decode(X)
+    X = dropcolumn(X, drop_low_signal=drop_low_signal)
+
+    y_binary = (y == 2).astype(int)  # 1 = bad credit
+
+    # Split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y_binary,
+        X,
+        y_binary,
         test_size=test_size,
         stratify=y_binary,
         random_state=random_state,
     )
 
-    # 4. Preprocessor
-    preprocessor = build_preprocessor(X_train)
+    # Fit encoders on train only
+    ordinal_enc, nominal_enc, scaler = build_encoders(X_train)
 
-    # 5. Fit + transform
-    X_train = preprocessor.fit_transform(X_train)
-    X_test = preprocessor.transform(X_test)
+    # Transform
+    X_train = apply_encoders(X_train, ordinal_enc, nominal_enc, scaler)
+    X_test = apply_encoders(X_test, ordinal_enc, nominal_enc, scaler)
 
-    # 6. Convert to DataFrame
-    feature_names = preprocessor.get_feature_names_out()
-
-    X_train = pd.DataFrame(X_train, columns=feature_names)
-    X_test = pd.DataFrame(X_test, columns=feature_names)
-
-    # 7. Save
+    # Save artifacts
     if save_artifacts:
         os.makedirs("models", exist_ok=True)
-        joblib.dump(preprocessor, "models/preprocessor.pkl")
-        print("✅ Preprocessor saved")
+        joblib.dump(ordinal_enc, "models/ordinal_enc.pkl")
+        joblib.dump(nominal_enc, "models/nominal_enc.pkl")
+        joblib.dump(scaler, "models/scaler.pkl")
+        print("Artifacts saved to models/")
 
     print(f"Train: {X_train.shape} | Test: {X_test.shape}")
-    print(f"Train bad rate: {y_train.mean():.1%}")
-    print(f"Test bad rate:  {y_test.mean():.1%}")
+    print(f"Class balance (train): {y_train.mean():.1%} bad credit")
+    print(f"Class balance (test):  {y_test.mean():.1%} bad credit")
 
     return X_train, X_test, y_train, y_test
 
+# %% [markdown]
+# loads saved artifacts (encoder and scalars) from the list so the app can re use them
+# 
+# 
 
-# %% API HELPER
+# %%
+def load_artifacts():
+    """ load artifacts and scalar. Used by FastAPI at startup"""
+    ordinal_enc = joblib.load('models/ordinal_enc.pkl')
+    nominal_enc = joblib.load('models/nominal_enc.pkl')
+    scaler = joblib.load('models/scaler.pkl')
+    return ordinal_enc, nominal_enc, scaler
 
-def load_preprocessor():
-    return joblib.load("models/preprocessor.pkl")
-
-
+# %%
 def preprocess_single(input_dict: dict) -> pd.DataFrame:
+    """
+    Preprocess a single applicant dict from the API.
+    Decodes, drops excluded cols, applies saved encoders.
+    Returns a single-row DataFrame ready for model.predict_proba().
+    """
     X = pd.DataFrame([input_dict])
-    X = rename_columns(X)
     X = decode(X)
-    
+    X = dropcolumn(X, drop_low_signal=False)
+    ordinal_enc, nominal_enc, scaler = load_artifacts()
+    return apply_encoders(X, ordinal_enc, nominal_enc, scaler)
 
-    preprocessor = load_preprocessor()
-    X = preprocessor.transform(X)
 
-    return pd.DataFrame(X)
