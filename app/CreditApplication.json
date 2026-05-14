@@ -1,0 +1,21 @@
+{
+  "checking_account_status": "> 200 DM",
+  "credit_history": "existing paid",
+  "savings_account": "100\u2013500 DM",
+  "employment_since": "unemployed",
+  "purpose": "car (new)",
+  "personal_status_sex": "male: divorced",
+  "other_debtors": "co-applicant",
+  "property": "savings/insurance",
+  "other_installment_plans": "none",
+  "housing": "rent",
+  "job": "unskilled non-resident",
+  "telephone": "yes, registered",
+  "duration_months": 23,
+  "credit_amount": 3000.0,
+  "installment_rate_pct": 2,
+  "residence_since": 3,
+  "age": 35,
+  "existing_credits_count": 9,
+  "dependent_count": 1
+}
